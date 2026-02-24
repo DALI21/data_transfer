@@ -1,0 +1,67 @@
+
+On macOS, /usr/bin/java is just a launcher that points to the “current” JDK. We need to know which JDK it’s using, then import the certificate into that JDK’s truststore.
+
+1. Identify the real JAVA_HOME
+Run:
+
+bash
+/usr/libexec/java_home -V 2>&1
+You’ll get something like:
+
+text
+Matching Java Virtual Machines (2):
+    17.0.9 (x86_64) "Oracle Corporation" - "Java SE 17" /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+    11.0.20 (x86_64) "Oracle Corporation" - "Java SE 11" /Library/Java/JavaVirtualMachines/jdk-11.jdk/Contents/Home
+/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+The last line is the active JAVA_HOME. Copy that path; I’ll call it JAVA_HOME. Example:
+
+text
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+2. Extract the citools certificate
+bash
+echo | openssl s_client -connect citools.st.com:443 -servername citools.st.com 2>/dev/null \
+  | openssl x509 -outform PEM > citools.crt
+
+cat citools.crt
+Verify you see:
+
+text
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+3. Import into the correct truststore
+Use the JAVA_HOME from step 1:
+
+bash
+sudo keytool -importcert \
+  -alias citools-st-com \
+  -keystore "$JAVA_HOME/lib/security/cacerts" \
+  -file citools.crt
+Keystore password: usually changeit.
+Answer yes when it asks to trust the certificate.
+Verify:
+
+bash
+sudo keytool -list \
+  -keystore "$JAVA_HOME/lib/security/cacerts" \
+  -alias citools-st-com
+4. Force use of that JDK and start agent
+In the same terminal:
+
+bash
+export JAVA_HOME="$JAVA_HOME"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+which java
+java -version
+Confirm this shows the same JAVA_HOME and version.
+
+Then:
+
+bash
+java -jar agent.jar \
+  -url https://citools.st.com/projects/stm32cubemx2validation/jenkins/ \
+  -secret 15065a74e20e008879bbef6a8f979759245ea72f51e9320d06562f7a848473ff \
+  -name "agent13_MAC" \
+  -webSocket \
+  -workDir "/Users/tuncubevalidadm/tmp"
